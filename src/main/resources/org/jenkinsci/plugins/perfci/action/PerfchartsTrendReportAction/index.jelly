@@ -1,0 +1,38 @@
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler"
+         xmlns:l="/lib/layout" xmlns:f="/lib/form" xmlns="http://www.w3.org/1999/xhtml">
+    <l:layout title="">
+        <st:include it="${it.project}" page="sidepanel.jelly"/>
+        <l:main-panel>
+            <style type="text/css">
+                .error_msg_error {
+                color: red;
+                }
+            </style>
+            <script type="text/javascript"
+                    src="${resURL}/plugin/perfci/lib/jquery-1.11.1.min.js"></script>
+            <script type="text/javascript">
+                jQuery.noConflict();
+            </script>
+            <script type="text/javascript"
+                    src="${resURL}/plugin/perfci/js/PerfchartsProjectTrendAction.js"></script>
+            <form action="submit" method="post" name="builds_input">
+                <p>
+                    Specify which builds you want to show in the report. If you are not sure, just click <strong>OK</strong>.
+                </p>
+                <f:entry>
+                    <textarea id="builds" name="builds"></textarea>
+                </f:entry>
+                <p>
+                    A comma separated list, without space. Leaving empty means all builds are included. There are some examples:
+                </p>
+                <ul>
+                    <li>1-5</li>
+                    <li>1-5,7,8-11</li>
+                    <li>89-60,2,5,4,7-10</li>
+                </ul>
+                <input id="btn_submit" type="button" value="OK"/>
+                <p id="message"></p>
+            </form>
+        </l:main-panel>
+    </l:layout>
+</j:jelly>
