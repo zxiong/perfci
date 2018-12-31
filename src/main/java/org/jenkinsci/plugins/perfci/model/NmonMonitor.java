@@ -1,9 +1,11 @@
 package org.jenkinsci.plugins.perfci.model;
 
 import hudson.Extension;
+import hudson.FilePath;
 import hudson.Launcher;
-import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
+import hudson.model.Run;
+import hudson.model.TaskListener;
 import hudson.org.apache.tools.tar.TarInputStream;
 import hudson.remoting.Callable;
 import hudson.util.FormValidation;
@@ -83,7 +85,7 @@ public class NmonMonitor extends ResourceMonitor implements BaseDirectoryRelocat
         return interval;
     }
 
-    private void tryStart(String projectName, int buildId, BuildListener listener) throws IOException, InterruptedException {
+    private void tryStart(String projectName, int buildId, TaskListener listener) throws IOException, InterruptedException {
         URL currentVersionFile = getClass()
                 .getResource(
                         "/org/jenkinsci/plugins/perfci/model/NmonMonitor/jenkins-perfci/version.txt");
@@ -193,7 +195,7 @@ public class NmonMonitor extends ResourceMonitor implements BaseDirectoryRelocat
         }
     }
 
-    private void tryStop(String projectName, int buildId, String workspaceDir, BuildListener listener) throws IOException, InterruptedException {
+    private void tryStop(String projectName, int buildId, String workspaceDir, TaskListener listener) throws IOException, InterruptedException {
         //String projectDir = getProjectDir(projectName);
         SSHClient client = new SSHClient();
         client.setConnectTimeout(TIMEOUT);
@@ -288,12 +290,12 @@ public class NmonMonitor extends ResourceMonitor implements BaseDirectoryRelocat
     }
 
     @Override
-    public void start(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws IOException, InterruptedException {
+    public void start(final Run<?, ?> build, FilePath workspace, Launcher launcher, final TaskListener listener) throws IOException, InterruptedException {
         if (isDisabled) {
             listener.getLogger().println("WARNING: PerfCI will not start NMON monitor (" + this.host + ") according to your configuration.");
             return;
         }
-        final String projectName = build.getProject().getName();
+        final String projectName = build.getParent().getName();
         final int buildId = build.number;
 //        for (int i = 1; i <= MAX_TRIES; ++i) {
 //        listener.getLogger().println(
@@ -321,7 +323,7 @@ public class NmonMonitor extends ResourceMonitor implements BaseDirectoryRelocat
     }
 
     @Override
-    public void stop(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws IOException, InterruptedException {
+    public void stop(final Run<?, ?> build, FilePath workspace, Launcher launcher, final TaskListener listener) throws IOException, InterruptedException {
         if (isDisabled) {
             listener.getLogger().println("WARNING: PerfCI will not stop NMON monitor (" + this.host + ") according to your configuration.");
             return;
@@ -330,9 +332,9 @@ public class NmonMonitor extends ResourceMonitor implements BaseDirectoryRelocat
 //            for (int i = 1; i <= MAX_TRIES; ++i) {
 //        listener.getLogger().println("INFO: Stopping NMON monitor... (try " + i + " of "
 //                + MAX_TRIES + ")");
-        final String projectName = build.getProject().getName();
+        final String projectName = build.getParent().getName();
         final int buildId = build.number;
-        final String workspaceDir = build.getWorkspace().getRemote();
+        final String workspaceDir = workspace.getRemote();
         //listener.getLogger().println("INFO: Stopping NMON monitor...");
         launcher.getChannel().call(new Callable<Object, IOException>() {
             @Override

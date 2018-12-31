@@ -6,6 +6,8 @@ import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
+import hudson.model.Run;
+import hudson.model.TaskListener;
 import hudson.remoting.Callable;
 import hudson.util.FormValidation;
 import org.apache.tools.ant.types.Commandline;
@@ -48,7 +50,7 @@ public class JmeterPerformanceTester extends PerformanceTester implements LogDir
         this.jmeterArgs = jmeterArgs;
     }
 
-    public void run(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws IOException, InterruptedException {
+    public void run(final Run<?, ?> build, FilePath workspace,final Launcher launcher, final TaskListener listener) throws IOException, InterruptedException {
         if (disabled) {
             listener.getLogger().println("[WARNING] Ignore disabled task: " + this.toString());
             return;
@@ -57,7 +59,7 @@ public class JmeterPerformanceTester extends PerformanceTester implements LogDir
         final String resultDir = this.getBaseDirectory() == null || this.getBaseDirectory().isEmpty() ? "." : this.getBaseDirectory();
         final String jmeterLogDir = logDirectory == null || logDirectory.isEmpty() ? resultDir : logDirectory;
 
-        final String workspaceDirFullPath = build.getWorkspace().getRemote();
+        final String workspaceDirFullPath = workspace.getRemote();
 
         final SimpleDateFormat dateFormatForLogName = new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US);
         dateFormatForLogName.setTimeZone(TimeZone.getTimeZone("GMT"));
@@ -65,7 +67,7 @@ public class JmeterPerformanceTester extends PerformanceTester implements LogDir
 
         env.put("PERFCI_WORKING_DIR", new File(workspaceDirFullPath).toPath().relativize(new File(workspaceDirFullPath, resultDir).toPath()).toString());
 
-        for (final FilePath file : build.getWorkspace().list(env.expand(jmxIncludingPattern), env.expand(jmxExcludingPattern))) {
+        for (final FilePath file : workspace.list(env.expand(jmxIncludingPattern), env.expand(jmxExcludingPattern))) {
             launcher.getChannel().call(new Callable<Object, IOException>() {
                 @Override
                 public void checkRoles(RoleChecker checker) throws SecurityException {
@@ -91,20 +93,26 @@ public class JmeterPerformanceTester extends PerformanceTester implements LogDir
                     // construct command line arguments for a Jmeter execution
                     final List<String> cmdArgs = new LinkedList<String>();
                     cmdArgs.addAll(Arrays.asList(Commandline.translateCommandline(env.expand(jmeterCommand))));
-                    cmdArgs.addAll(Arrays.asList(Commandline.translateCommandline(env.expand(jmeterArgs))));
-                    cmdArgs.add("-n");
-                    cmdArgs.add("-t");
-                    //cmdArgs.add(fileRelativePath);
-                    cmdArgs.add(resultDirObj.toPath().relativize(new File(fileFullPath).toPath()).toString());
-                    if (!noAutoJTL) {
-                        String resultFileName = resultDir + File.separator + file.getBaseName() + ".jtl";
-                        cmdArgs.add("-l");
-                        //cmdArgs.add(resultFileName);
-                        cmdArgs.add(resultDirObj.toPath().relativize(new File(workspaceDirFullPath, resultFileName).toPath()).toString());
+
+                    // If run test in other ways, such JMeter runs in OpenShift. Just add JMeter test script
+                    if(! jmeterCommand.startsWith("docker run")){
+                        cmdArgs.add(resultDirObj.toPath().relativize(new File(fileFullPath).toPath()).toString().replace("../",""));
+                    }else {
+                        cmdArgs.addAll(Arrays.asList(Commandline.translateCommandline(env.expand(jmeterArgs))));
+                        cmdArgs.add("-n");
+                        cmdArgs.add("-t");
+                        //cmdArgs.add(fileRelativePath);
+                        cmdArgs.add(resultDirObj.toPath().relativize(new File(fileFullPath).toPath()).toString());
+                        if (!noAutoJTL) {
+                            String resultFileName = resultDir + File.separator + file.getBaseName() + ".jtl";
+                            cmdArgs.add("-l");
+                            //cmdArgs.add(resultFileName);
+                            cmdArgs.add(resultDirObj.toPath().relativize(new File(workspaceDirFullPath, resultFileName).toPath()).toString());
+                        }
+                        cmdArgs.add("-j");
+                        //cmdArgs.add(logFileName);
+                        cmdArgs.add(resultDirObj.toPath().relativize(logFile.toPath()).toString());
                     }
-                    cmdArgs.add("-j");
-                    //cmdArgs.add(logFileName);
-                    cmdArgs.add(resultDirObj.toPath().relativize(logFile.toPath()).toString());
 
                     listener.getLogger().printf("INFO: Launch Jmeter by executing`" + cmdArgs + "`...\n");
                     ProcessBuilder jmeterProcessBuilder = new ProcessBuilder(cmdArgs);

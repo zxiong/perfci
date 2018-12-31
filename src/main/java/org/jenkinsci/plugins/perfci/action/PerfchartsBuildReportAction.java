@@ -2,6 +2,7 @@ package org.jenkinsci.plugins.perfci.action;
 
 import hudson.model.AbstractBuild;
 import hudson.model.Action;
+import hudson.model.Run;
 import net.sf.json.JSONArray;
 import net.sf.json.JSONObject;
 import org.apache.commons.io.IOUtils;
@@ -20,16 +21,16 @@ import java.util.logging.Logger;
 /**
  * Created by vfreex on 11/26/15.
  */
-public class PerfchartsBuildReportAction implements Action {
+public class PerfchartsBuildReportAction implements Action{
     private static final String ACTION_NAME = "Performance Report";
     private static final String ACTION_PATH = "performance-report";
     private static final String ACTION_ICON = "graph.gif";
     private static final Logger LOGGER = Logger
             .getLogger(PerfchartsBuildReportAction.class.getName());
 
-    public final AbstractBuild<?, ?> build;
+    public final Run<?, ?> build;
 
-    public PerfchartsBuildReportAction(AbstractBuild<?, ?> build) {
+    public PerfchartsBuildReportAction(Run<?, ?> build) {
         this.build = build;
     }
 
@@ -70,7 +71,7 @@ public class PerfchartsBuildReportAction implements Action {
 		 * "This is an unsuccessful build."); return; }
 		 */
         JSONArray builds = new JSONArray();
-        for (AbstractBuild<?, ?> buildItem : build.getProject().getBuilds()) {
+        for (Run<?, ?> buildItem : build.getParent().getBuilds()) {
             // whenever the build number larger or not, can get the builds in
             // "sel_build"
 			/*
@@ -91,8 +92,7 @@ public class PerfchartsBuildReportAction implements Action {
     }
 
     public PerfchartsComparisonReport getComparisonReport(int buildNumber) {
-        return new PerfchartsComparisonReport(build.getProject(), build, build
-                .getProject().getBuildByNumber(buildNumber));
+        return new PerfchartsComparisonReport(build.getParent(), build, build.getParent().getBuildByNumber(buildNumber));
     }
 
     @Override

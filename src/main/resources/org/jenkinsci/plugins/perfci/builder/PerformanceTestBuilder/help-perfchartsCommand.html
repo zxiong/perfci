@@ -1,0 +1,13 @@
+<p>
+    We use this command to start performance result analysis to generate test report</a>.
+</p>
+<p>
+    You can use $VAR style (even on Windows) for references to Jenkins-defined environment variables.
+</p>
+<p>
+    1) Start tests with load generator with docker on Jenkins slave:
+    <br>docker run --rm -v "$WORKSPACE":/data:rw jimmyxiong/perfchart perfcharts</br>
+    <br/>
+    2) Start tests with load generators in OpenShift
+    <br>sh openshift/gen_report.sh $WORKSPACE $BUILD_NUMBER</br>
+</p>

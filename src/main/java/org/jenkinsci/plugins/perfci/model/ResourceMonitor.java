@@ -1,11 +1,9 @@
 package org.jenkinsci.plugins.perfci.model;
 
 import hudson.ExtensionPoint;
+import hudson.FilePath;
 import hudson.Launcher;
-import hudson.model.AbstractBuild;
-import hudson.model.BuildListener;
-import hudson.model.Describable;
-import hudson.model.Descriptor;
+import hudson.model.*;
 import hudson.remoting.Callable;
 import jenkins.model.Jenkins;
 import org.jenkinsci.plugins.perfci.common.BaseDirectoryRelocatable;
@@ -16,9 +14,9 @@ import java.io.Serializable;
 
 public abstract class ResourceMonitor implements Describable<ResourceMonitor>, Serializable, ExtensionPoint {
 
-    public abstract void start(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener) throws IOException, InterruptedException;
+    public abstract void start(Run<?, ?> build, FilePath workspace ,Launcher launcher, TaskListener listener) throws IOException, InterruptedException;
 
-    public abstract void stop(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener) throws IOException, InterruptedException;
+    public abstract void stop(Run<?, ?> build, FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException;
 
     public abstract boolean isEnabled();
 

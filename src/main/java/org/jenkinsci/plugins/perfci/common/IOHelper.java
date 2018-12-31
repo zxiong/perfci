@@ -3,6 +3,8 @@ package org.jenkinsci.plugins.perfci.common;
 import hudson.FilePath;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
+import hudson.model.Run;
+import hudson.model.TaskListener;
 
 import java.io.File;
 import java.io.IOException;
@@ -84,11 +86,11 @@ public class IOHelper {
         return new File(base.getRemote()).toURI().relativize(new File(path.getRemote()).toURI()).getPath();
     }
 
-    public static void copyDirFromWorkspace(FilePath src, String pathToBuildDir, AbstractBuild<?, ?> build, BuildListener listener) throws IOException, InterruptedException {
+    public static void copyDirFromWorkspace(FilePath src, String pathToBuildDir, Run<?, ?> build, FilePath workspace,TaskListener listener) throws IOException, InterruptedException {
         if (!src.exists() || !src.isDirectory())
             throw new IOException("Directory '" + src.getName() +
                     "' does not exist.");
-        URI srcRelativeToWorkspace = new File(build.getWorkspace().getRemote()).toURI().relativize(new File(src.getRemote()).toURI());
+        URI srcRelativeToWorkspace = new File(workspace.getRemote()).toURI().relativize(new File(src.getRemote()).toURI());
         if (srcRelativeToWorkspace.isAbsolute())
             throw new IOException("FilePath `src` is not located in workspace.");
         FilePath pathOnMaster = new FilePath(new File(build.getRootDir().getAbsolutePath() + File.separator + pathToBuildDir));

@@ -1,11 +1,9 @@
 package org.jenkinsci.plugins.perfci.model;
 
 import hudson.ExtensionPoint;
+import hudson.FilePath;
 import hudson.Launcher;
-import hudson.model.AbstractBuild;
-import hudson.model.BuildListener;
-import hudson.model.Describable;
-import hudson.model.Descriptor;
+import hudson.model.*;
 import jenkins.model.Jenkins;
 import org.jenkinsci.plugins.perfci.common.BaseDirectoryRelocatable;
 
@@ -20,7 +18,7 @@ public abstract class PerformanceTester implements Describable<PerformanceTester
             Descriptor<PerformanceTester> {
     }
 
-    public abstract void run(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws IOException, InterruptedException;
+    public abstract void run(final Run<?, ?> build, FilePath workspace, final Launcher launcher, final TaskListener listener) throws IOException, InterruptedException;
 
     public PerformanceTesterDescriptor getDescriptor() {
         return (PerformanceTesterDescriptor) Jenkins.getInstance().getDescriptor(

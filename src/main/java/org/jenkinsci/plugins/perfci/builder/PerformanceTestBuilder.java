@@ -2,16 +2,16 @@ package org.jenkinsci.plugins.perfci.builder;
 
 import hudson.EnvVars;
 import hudson.Extension;
+import hudson.FilePath;
 import hudson.Launcher;
-import hudson.model.AbstractBuild;
-import hudson.model.AbstractProject;
-import hudson.model.Action;
-import hudson.model.BuildListener;
+import hudson.model.*;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.Builder;
 import hudson.util.ListBoxModel;
 import jenkins.model.Jenkins;
+import jenkins.tasks.SimpleBuildStep;
 import net.sf.json.JSONObject;
+import org.jenkinsci.Symbol;
 import org.jenkinsci.plugins.perfci.action.PerfchartsBuildReportAction;
 import org.jenkinsci.plugins.perfci.action.PerfchartsTrendReportAction;
 import org.jenkinsci.plugins.perfci.common.*;
@@ -21,8 +21,10 @@ import org.jenkinsci.plugins.perfci.model.PerformanceTester;
 import org.jenkinsci.plugins.perfci.model.ResourceMonitor;
 import org.jenkinsci.remoting.RoleChecker;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.StaplerRequest;
 
+import javax.annotation.Nonnull;
 import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
@@ -31,7 +33,7 @@ import java.util.*;
 /**
  * Created by vfreex on 11/23/15.
  */
-public class PerformanceTestBuilder extends Builder implements Serializable {
+public class PerformanceTestBuilder extends Builder implements SimpleBuildStep,Serializable {
     private boolean disabled;
     private String resultDir;
     private int keepBuilds;
@@ -63,15 +65,16 @@ public class PerformanceTestBuilder extends Builder implements Serializable {
     }
 
     @Override
-    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws InterruptedException, IOException {
+    public void perform(final  @Nonnull Run<?, ?> build, final @Nonnull FilePath workspace, final @Nonnull Launcher launcher, final @Nonnull TaskListener listener)
+            throws InterruptedException, IOException {
         if (disabled) {
             listener.getLogger().println("[WARNING] Ignore PerformanceTestBuilder");
-            return true;
+            return;
         }
         final TimeZone fallbackTimezoneObj = TimeZone.getTimeZone(fallbackTimezone);
         // `buildDir` here is the directory where we put all test results and logs for this build. It is a relative path to Jenkins workspace.
         final String resultDir = this.resultDir == null ? "" : this.resultDir;
-        final String buildDir = resultDir + File.separator + "builds" + File.separator + +build.number;
+        final String buildDir = resultDir + File.separator + "builds" + File.separator + build.number;
         final String baseDirForBuild = buildDir + File.separator + "rawdata";
         final String logDirForBuild = buildDir + File.separator + "log";
         final String reportDirForBuild = buildDir + File.separator + "report";
@@ -91,7 +94,7 @@ public class PerformanceTestBuilder extends Builder implements Serializable {
                         ((ResultDirectoryRelocatable) resourceMonitor).setResultDirectory(resultDir);
                     }
                     try {
-                        resourceMonitor.start(build, launcher, listener);
+                        resourceMonitor.start(build, workspace,launcher, listener);
                     } catch (Exception ex) {
                         Thread t = Thread.currentThread();
                         t.getUncaughtExceptionHandler().uncaughtException(t, ex);
@@ -112,7 +115,7 @@ public class PerformanceTestBuilder extends Builder implements Serializable {
             if (performanceTester instanceof ResultDirectoryRelocatable) {
                 ((ResultDirectoryRelocatable) performanceTester).setResultDirectory(resultDir);
             }
-            performanceTester.run(build, launcher, listener);
+            performanceTester.run(build, workspace, launcher, listener);
         }
 
         // stop resource monitors and collect test results
@@ -125,7 +128,7 @@ public class PerformanceTestBuilder extends Builder implements Serializable {
                         ((BaseDirectoryRelocatable) resourceMonitor).setBaseDirectory(baseDirForBuild);
                     }
                     try {
-                        resourceMonitor.stop(build, launcher, listener);
+                        resourceMonitor.stop(build, workspace,launcher, listener);
                     } catch (Exception ex) {
                         Thread t = Thread.currentThread();
                         t.getUncaughtExceptionHandler().uncaughtException(t, ex);
@@ -139,7 +142,7 @@ public class PerformanceTestBuilder extends Builder implements Serializable {
         if (reportDisabled) {
             listener.getLogger().println("WARNING: No performance test reports will be generated according to your configuration.");
         } else {
-            final String workspaceFullPathOnAgent = build.getWorkspace().getRemote();
+            final String workspaceFullPathOnAgent = workspace.getRemote();
             launcher.getChannel().call(new hudson.remoting.Callable<Object, IOException>() {
                 @Override
                 public void checkRoles(RoleChecker checker) throws SecurityException {
@@ -172,14 +175,14 @@ public class PerformanceTestBuilder extends Builder implements Serializable {
             });
             // copy generated report to master
             listener.getLogger().println("INFO: Copying generated performance report to Jenkins master...");
-            IOHelper.copyDirFromWorkspace(build.getWorkspace().child(reportDirForBuild), Constants.PERF_CHARTS_RELATIVE_PATH, build, listener);
+            IOHelper.copyDirFromWorkspace(workspace.child(reportDirForBuild), Constants.PERF_CHARTS_RELATIVE_PATH, build,workspace, listener);
         }
 
         listener.getLogger().println("INFO: Preparing views for generated performance report...");
         build.addAction(new PerfchartsBuildReportAction(build));
 
         listener.getLogger().println("INFO: Everything is done.");
-        return true;
+        return;
     }
 
     @Override
@@ -193,6 +196,7 @@ public class PerformanceTestBuilder extends Builder implements Serializable {
         return disabled;
     }
 
+    @DataBoundSetter
     public void setDisabled(boolean disabled) {
         this.disabled = disabled;
     }
@@ -201,6 +205,7 @@ public class PerformanceTestBuilder extends Builder implements Serializable {
         return fallbackTimezone;
     }
 
+    @DataBoundSetter
     public void setFallbackTimezone(String fallbackTimezone) {
         this.fallbackTimezone = fallbackTimezone;
     }
@@ -209,6 +214,7 @@ public class PerformanceTestBuilder extends Builder implements Serializable {
         return reportDisabled;
     }
 
+    @DataBoundSetter
     public void setReportDisabled(boolean reportDisabled) {
         this.reportDisabled = reportDisabled;
     }
@@ -217,6 +223,7 @@ public class PerformanceTestBuilder extends Builder implements Serializable {
         return resultDir;
     }
 
+    @DataBoundSetter
     public void setResultDir(String resultDir) {
         this.resultDir = resultDir;
     }
@@ -225,6 +232,7 @@ public class PerformanceTestBuilder extends Builder implements Serializable {
         return performanceTesters;
     }
 
+    @DataBoundSetter
     public void setPerformanceTesters(List<PerformanceTester> performanceTesters) {
         this.performanceTesters = performanceTesters;
     }
@@ -233,6 +241,7 @@ public class PerformanceTestBuilder extends Builder implements Serializable {
         return keepBuilds;
     }
 
+    @DataBoundSetter
     public void setKeepBuilds(int keepBuilds) {
         this.keepBuilds = keepBuilds;
     }
@@ -241,6 +250,7 @@ public class PerformanceTestBuilder extends Builder implements Serializable {
         return resourceMonitors;
     }
 
+    @DataBoundSetter
     public void setResourceMonitors(List<ResourceMonitor> resourceMonitors) {
         this.resourceMonitors = resourceMonitors;
     }
@@ -249,6 +259,7 @@ public class PerformanceTestBuilder extends Builder implements Serializable {
         return perfchartsCommand;
     }
 
+    @DataBoundSetter
     public void setPerfchartsCommand(String perfchartsCommand) {
         this.perfchartsCommand = perfchartsCommand;
     }
@@ -257,6 +268,7 @@ public class PerformanceTestBuilder extends Builder implements Serializable {
         return excludedTransactionPattern;
     }
 
+    @DataBoundSetter
     public void setExcludedTransactionPattern(String excludedTransactionPattern) {
         this.excludedTransactionPattern = excludedTransactionPattern;
     }
@@ -265,6 +277,7 @@ public class PerformanceTestBuilder extends Builder implements Serializable {
         return reportTemplate;
     }
 
+    @DataBoundSetter
     public void setReportTemplate(String reportTemplate) {
         this.reportTemplate = reportTemplate;
     }
@@ -273,6 +286,7 @@ public class PerformanceTestBuilder extends Builder implements Serializable {
      * Descriptor for {@link PerformanceTestBuilder}. Used as a singleton.
      * The class is marked as public so that it can be accessed from views.
      */
+    @Symbol({"performanceTestBuilder", "perfTestBuilder"})
     @Extension // This indicates to Jenkins that this is an implementation of an extension point.
     public static final class DescriptorImpl extends BuildStepDescriptor<Builder> {
         /**

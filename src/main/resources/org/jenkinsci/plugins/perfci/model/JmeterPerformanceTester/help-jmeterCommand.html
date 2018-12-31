@@ -4,3 +4,10 @@
 <p>
     You can use $VAR style (even on Windows) for references to Jenkins-defined environment variables.
 </p>
+<p>
+    1) Start tests with load generator with docker on Jenkins slave:
+    <br>docker run --rm -v "$WORKSPACE":/data:rw -w "/data/$PERFCI_WORKING_DIR" docker-perf.eng.pek2.redhat.com:5000/perfci-agent jmeter</br>
+    <br/>
+    2) Start tests with load generators in OpenShift
+    <br>ssh $WORKSPACE/openshift/run_test.sh $WORKSPACE $BUILD_NUMBER</br>
+</p>

@@ -2,6 +2,8 @@ package org.jenkinsci.plugins.perfci.model;
 
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
+import hudson.model.Job;
+import hudson.model.Run;
 import net.sf.json.JSONArray;
 import net.sf.json.JSONObject;
 import org.apache.commons.csv.CSVFormat;
@@ -18,11 +20,11 @@ import java.util.logging.Logger;
 
 public class PerfchartsComparisonReport {
     private final static Logger LOGGER = Logger.getLogger(PerfchartsComparisonReport.class.getName());
-    private AbstractBuild<?, ?> sourceBuild;
-    private AbstractBuild<?, ?> destBuild;
+    private Run<?, ?> sourceBuild;
+    private Run<?, ?> destBuild;
 
-    public PerfchartsComparisonReport(AbstractProject<?, ?> project,
-                                      AbstractBuild<?, ?> sourceBuild, AbstractBuild<?, ?> destBuild) {
+    public PerfchartsComparisonReport(Job project,
+                                      Run<?, ?> sourceBuild, Run<?, ?> destBuild) {
         if (sourceBuild == null)
             throw new NullPointerException("sourceBuild");
         this.sourceBuild = sourceBuild;
@@ -174,7 +176,7 @@ public class PerfchartsComparisonReport {
 			return;
 		}*/
         JSONArray builds = new JSONArray();
-        for (AbstractBuild<?, ?> buildItem : sourceBuild.getProject().getBuilds()) {
+        for (Run<?, ?> buildItem : sourceBuild.getParent().getBuilds()) {
             if (buildItem.number >= sourceBuild.number /*|| buildItem.getResult().isWorseThan(Result.SUCCESS)*/)
                 continue;
             JSONObject buildItemJSON = new JSONObject();
@@ -189,19 +191,19 @@ public class PerfchartsComparisonReport {
         writeJSON(response, result);
     }
 
-    public AbstractBuild<?, ?> getSourceBuild() {
+    public Run<?, ?> getSourceBuild() {
         return sourceBuild;
     }
 
-    public void setSourceBuild(AbstractBuild<?, ?> sourceBuild) {
+    public void setSourceBuild(Run<?, ?> sourceBuild) {
         this.sourceBuild = sourceBuild;
     }
 
-    public AbstractBuild<?, ?> getDestBuild() {
+    public Run<?, ?> getDestBuild() {
         return destBuild;
     }
 
-    public void setDestBuild(AbstractBuild<?, ?> destBuild) {
+    public void setDestBuild(Run<?, ?> destBuild) {
         this.destBuild = destBuild;
     }
 
