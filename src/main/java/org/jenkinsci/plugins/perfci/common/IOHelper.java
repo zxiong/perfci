@@ -87,6 +87,12 @@ public class IOHelper {
     }
 
     public static void copyDirFromWorkspace(FilePath src, String pathToBuildDir, Run<?, ?> build, FilePath workspace,TaskListener listener) throws IOException, InterruptedException {
+        if (!src.exists()){
+            File srcDirObj = new File(src.toString());
+            if (srcDirObj.mkdirs()){
+                listener.getLogger().println("INFO create directory " + srcDirObj.getAbsolutePath() + ".");
+            }
+        }
         if (!src.exists() || !src.isDirectory())
             throw new IOException("Directory '" + src.getName() +
                     "' does not exist.");
@@ -94,6 +100,7 @@ public class IOHelper {
         if (srcRelativeToWorkspace.isAbsolute())
             throw new IOException("FilePath `src` is not located in workspace.");
         FilePath pathOnMaster = new FilePath(new File(build.getRootDir().getAbsolutePath() + File.separator + pathToBuildDir));
+        listener.getLogger().println("pathOnMaster is" + pathOnMaster);
         FilePath zippedFile = pathOnMaster.getParent().child(src.getName() + ".zip");
         int _try;
         for (_try = 1; _try <= 5; ++_try) {

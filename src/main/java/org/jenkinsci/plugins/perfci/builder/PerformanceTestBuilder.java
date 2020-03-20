@@ -20,6 +20,8 @@ import org.jenkinsci.plugins.perfci.executor.PerfchartsNewExecutor;
 import org.jenkinsci.plugins.perfci.model.PerformanceTester;
 import org.jenkinsci.plugins.perfci.model.ResourceMonitor;
 import org.jenkinsci.remoting.RoleChecker;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.StaplerRequest;
@@ -34,18 +36,18 @@ import java.util.*;
  * Created by vfreex on 11/23/15.
  */
 public class PerformanceTestBuilder extends Builder implements SimpleBuildStep,Serializable {
-    private boolean disabled;
-    private String resultDir;
-    private int keepBuilds;
-    private boolean reportDisabled;
-    private String fallbackTimezone;
-    private List<PerformanceTester> performanceTesters;
-    private List<ResourceMonitor> resourceMonitors;
-    private String perfchartsCommand;
-    private String excludedTransactionPattern;
-    private String reportTemplate;
+    private boolean disabled = false;
+    private String resultDir = "perf-out";
+    private int keepBuilds = 5;
+    private boolean reportDisabled = false;
+    private String fallbackTimezone = "UTC";
+    private List<PerformanceTester> performanceTesters = Collections.<PerformanceTester>emptyList();
+    private List<ResourceMonitor> resourceMonitors = Collections.<ResourceMonitor>emptyList();
+    private String perfchartsCommand = Constants.PERFCHARTSCOMMAND;
+    private String excludedTransactionPattern = "";
+    private String reportTemplate = "perf-baseline";
 
-    @DataBoundConstructor
+
     public PerformanceTestBuilder(boolean disabled, String resultDir, int keepBuilds, boolean reportDisabled, String fallbackTimezone, List<PerformanceTester> performanceTesters, List<ResourceMonitor> resourceMonitors, String perfchartsCommand, String excludedTransactionPattern, String reportTemplate) {
         this.disabled = disabled;
         this.resultDir = resultDir;
@@ -57,6 +59,13 @@ public class PerformanceTestBuilder extends Builder implements SimpleBuildStep,S
         this.reportTemplate = reportTemplate;
         this.performanceTesters = performanceTesters != null ? performanceTesters : Collections.<PerformanceTester>emptyList();
         this.resourceMonitors = resourceMonitors != null ? resourceMonitors : Collections.<ResourceMonitor>emptyList();
+    }
+
+    @DataBoundConstructor
+    public PerformanceTestBuilder(List<PerformanceTester> performanceTesters){
+        this(false,"perf-output/",5,false,"UTC",performanceTesters,Collections.<ResourceMonitor>emptyList(),
+                new DescriptorImpl().getDefaultPerfchartsCommand()
+                ,"","perf-baseline");
     }
 
     @Override
@@ -78,9 +87,8 @@ public class PerformanceTestBuilder extends Builder implements SimpleBuildStep,S
         final String baseDirForBuild = buildDir + File.separator + "rawdata";
         final String logDirForBuild = buildDir + File.separator + "log";
         final String reportDirForBuild = buildDir + File.separator + "report";
-        EnvVars env = build.getEnvironment(listener);
+        final EnvVars env = build.getEnvironment(listener);
         final String perfchartsCommand = env.expand(this.perfchartsCommand);
-
         // start resource monitors
         TaskQueue startMonitorTaskQueue = new TaskQueue();
         for (final ResourceMonitor resourceMonitor : resourceMonitors) {
@@ -143,15 +151,19 @@ public class PerformanceTestBuilder extends Builder implements SimpleBuildStep,S
             listener.getLogger().println("WARNING: No performance test reports will be generated according to your configuration.");
         } else {
             final String workspaceFullPathOnAgent = workspace.getRemote();
+            listener.getLogger().println(workspaceFullPathOnAgent);
+            env.put("workspace", workspaceFullPathOnAgent);
+            listener.getLogger().println(env.expand(perfchartsCommand));
             launcher.getChannel().call(new hudson.remoting.Callable<Object, IOException>() {
                 @Override
                 public void checkRoles(RoleChecker checker) throws SecurityException {
                 }
 
                 @Override
-                public Object call() throws IOException {
+                public Object call() throws IOException{
                     // generate a report
-                    PerfchartsNewExecutor perfchartsExecutor = new PerfchartsNewExecutor(perfchartsCommand,
+                    PerfchartsNewExecutor perfchartsExecutor = new PerfchartsNewExecutor(
+                            env.expand(!perfchartsCommand.startsWith("docker run") ? perfchartsCommand + " " +env.get("WORKSPACE") + " " + env.get("BUILD_NUMBER") :perfchartsCommand),
                             reportTemplate, workspaceFullPathOnAgent,
                             fallbackTimezoneObj,
                             baseDirForBuild,
@@ -289,6 +301,14 @@ public class PerformanceTestBuilder extends Builder implements SimpleBuildStep,S
     @Symbol({"performanceTestBuilder", "perfTestBuilder"})
     @Extension // This indicates to Jenkins that this is an implementation of an extension point.
     public static final class DescriptorImpl extends BuildStepDescriptor<Builder> {
+
+//        private String defaultPerfchartsCommand = "docker run --net=host --rm -v $WORKSPACE:/data:rw docker-registry.upshift.redhat.com/errata-qe-test/perfci-agent:3.2 perfcharts";
+        private String defaultPerfchartsCommand = "sh openshift/gen_report.sh";
+//        private String defaultJmeterCommand. = "docker run --net=host --rm -v $WORKSPACE:/data:rw -w $PERFCI_WORKING_DIR docker-registry.upshift.redhat.com/errata-qe-test/perfci-agent:3.2 jmeter";
+        private String defaultJmeterCommand = "sh $WORKSPACE/openshift/run_test.sh";
+        private String defaultJmxIncludingPattern = "*.jmx";
+        private String nmonSSHKeys = "\"$HOME\"/.ssh/id_rsa,\"$HOME\"/.ssh/id_dsa";
+        private String defultTest ;
         /**
          * In order to load the persisted global configuration, you have to
          * call load() in the constructor.
@@ -312,6 +332,10 @@ public class PerformanceTestBuilder extends Builder implements SimpleBuildStep,S
 
         @Override
         public boolean configure(StaplerRequest req, JSONObject formData) throws FormException {
+            this.defaultPerfchartsCommand = formData.getString("defaultPerfchartsCommand");
+            this.defaultJmeterCommand = formData.getString("defaultJmeterCommand");
+            this.defaultJmxIncludingPattern = formData.getString("defaultJmxIncludingPattern");
+
             save();
             return super.configure(req, formData);
         }
@@ -334,6 +358,33 @@ public class PerformanceTestBuilder extends Builder implements SimpleBuildStep,S
             return new ListBoxModel(new ListBoxModel.Option("Performance baseline test", "perf-baseline"),
                     new ListBoxModel.Option("General purpose performance test", "perf-general"));
         }
+
+        public String getDefaultPerfchartsCommand() {
+            return defaultPerfchartsCommand;
+        }
+
+        public void setDefaultPerfchartsCommand(String defaultPerfchartsCommand) {
+            this.defaultPerfchartsCommand = defaultPerfchartsCommand;
+        }
+
+        public String getDefaultJmeterCommand() {
+            return defaultJmeterCommand;
+        }
+
+        public void setDefaultJmeterCommand(String defaultJmeterCommand) {
+            this.defaultJmeterCommand = defaultJmeterCommand;
+        }
+
+
+        public String getDefaultJmxIncludingPattern() {
+            return defaultJmxIncludingPattern;
+        }
+
+        public void setDefaultJmxIncludingPattern(String defaultJmxIncludingPattern) {
+            this.defaultJmxIncludingPattern = defaultJmxIncludingPattern;
+        }
+
+
     }
 
 

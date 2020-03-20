@@ -11,16 +11,19 @@ import hudson.model.TaskListener;
 import hudson.remoting.Callable;
 import hudson.util.FormValidation;
 import org.apache.tools.ant.types.Commandline;
+import org.jenkinsci.Symbol;
+import org.jenkinsci.plugins.perfci.builder.PerformanceTestBuilder;
 import org.jenkinsci.plugins.perfci.common.BaseDirectoryRelocatable;
+import org.jenkinsci.plugins.perfci.common.Constants;
 import org.jenkinsci.plugins.perfci.common.LogDirectoryRelocatable;
 import org.jenkinsci.remoting.RoleChecker;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
@@ -30,17 +33,17 @@ import java.util.*;
 public class JmeterPerformanceTester extends PerformanceTester implements LogDirectoryRelocatable, BaseDirectoryRelocatable {
     private String logDirectory;
     private String baseDirectory;
-    private boolean disabled;
-    private boolean noAutoJTL;
+    private boolean disabled = false;
+    private boolean noAutoJTL = false;
     /**
      * ANT-style wildcards
      */
-    private String jmxIncludingPattern;
-    private String jmxExcludingPattern;
+    private String jmxIncludingPattern ;
+    private String jmxExcludingPattern ;
     private String jmeterCommand;
     private String jmeterArgs;
 
-    @DataBoundConstructor
+
     public JmeterPerformanceTester(boolean disabled, boolean noAutoJTL, String jmxIncludingPattern, String jmxExcludingPattern, String jmeterCommand, String jmeterArgs) {
         this.disabled = disabled;
         this.noAutoJTL = noAutoJTL;
@@ -50,7 +53,15 @@ public class JmeterPerformanceTester extends PerformanceTester implements LogDir
         this.jmeterArgs = jmeterArgs;
     }
 
-    public void run(final Run<?, ?> build, FilePath workspace,final Launcher launcher, final TaskListener listener) throws IOException, InterruptedException {
+    @DataBoundConstructor
+    public JmeterPerformanceTester(){
+        this(false,false,new PerformanceTestBuilder.DescriptorImpl().getDefaultJmxIncludingPattern()
+                , ""
+                ,new PerformanceTestBuilder.DescriptorImpl().getDefaultJmeterCommand()
+                ,"" );
+    }
+
+    public void run(final Run<?, ?> build, FilePath workspace,final Launcher launcher, final TaskListener listener) throws IOException, InterruptedException,FileNotFoundException {
         if (disabled) {
             listener.getLogger().println("[WARNING] Ignore disabled task: " + this.toString());
             return;
@@ -63,11 +74,13 @@ public class JmeterPerformanceTester extends PerformanceTester implements LogDir
 
         final SimpleDateFormat dateFormatForLogName = new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US);
         dateFormatForLogName.setTimeZone(TimeZone.getTimeZone("GMT"));
-
-
+        env.put("WORKSPACE", workspaceDirFullPath);
         env.put("PERFCI_WORKING_DIR", new File(workspaceDirFullPath).toPath().relativize(new File(workspaceDirFullPath, resultDir).toPath()).toString());
-
-        for (final FilePath file : workspace.list(env.expand(jmxIncludingPattern), env.expand(jmxExcludingPattern))) {
+        FilePath[]  jmeterFile= workspace.list(env.expand(jmxIncludingPattern),env.expand(jmxExcludingPattern));
+        if (jmeterFile.length == 0){
+            throw new FileNotFoundException("ERROR can't found your jmeter script in your path, please check you jmeter path");
+        }
+        for (final FilePath file : jmeterFile) {
             launcher.getChannel().call(new Callable<Object, IOException>() {
                 @Override
                 public void checkRoles(RoleChecker checker) throws SecurityException {
@@ -93,10 +106,15 @@ public class JmeterPerformanceTester extends PerformanceTester implements LogDir
                     // construct command line arguments for a Jmeter execution
                     final List<String> cmdArgs = new LinkedList<String>();
                     cmdArgs.addAll(Arrays.asList(Commandline.translateCommandline(env.expand(jmeterCommand))));
-
                     // If run test in other ways, such JMeter runs in OpenShift. Just add JMeter test script
                     if(! jmeterCommand.startsWith("docker run")){
+                        cmdArgs.add(env.get("WORKSPACE"));
+                        cmdArgs.add(env.get("BUILD_NUMBER"));
                         cmdArgs.add(resultDirObj.toPath().relativize(new File(fileFullPath).toPath()).toString().replace("../",""));
+                        cmdArgs.add(jmeterArgs);
+                        cmdArgs.add(env.get("SLAVE_NUMBER"));
+                        cmdArgs.add(env.get("CPU"));
+                        cmdArgs.add(env.get("MEM"));
                     }else {
                         cmdArgs.addAll(Arrays.asList(Commandline.translateCommandline(env.expand(jmeterArgs))));
                         cmdArgs.add("-n");
@@ -140,6 +158,7 @@ public class JmeterPerformanceTester extends PerformanceTester implements LogDir
         return jmxIncludingPattern;
     }
 
+    @DataBoundSetter
     public void setJmxIncludingPattern(String jmxIncludingPattern) {
         this.jmxIncludingPattern = jmxIncludingPattern;
     }
@@ -148,6 +167,7 @@ public class JmeterPerformanceTester extends PerformanceTester implements LogDir
         return jmxExcludingPattern;
     }
 
+    @DataBoundSetter
     public void setJmxExcludingPattern(String jmxExcludingPattern) {
         this.jmxExcludingPattern = jmxExcludingPattern;
     }
@@ -156,6 +176,7 @@ public class JmeterPerformanceTester extends PerformanceTester implements LogDir
         return jmeterCommand;
     }
 
+    @DataBoundSetter
     public void setJmeterCommand(String jmeterCommand) {
         this.jmeterCommand = jmeterCommand;
     }
@@ -164,16 +185,22 @@ public class JmeterPerformanceTester extends PerformanceTester implements LogDir
         return jmeterArgs;
     }
 
+    @DataBoundSetter
     public void setJmeterArgs(String jmeterArgs) {
         this.jmeterArgs = jmeterArgs;
     }
 
-    public boolean isDisabled() {
+
+    public boolean getDisabled() {
         return disabled;
     }
-
+    @DataBoundSetter
     public void setDisabled(boolean disabled) {
         this.disabled = disabled;
+    }
+    @DataBoundSetter
+    public void setNoAutoJTL(boolean noAutoJTL) {
+        this.noAutoJTL = noAutoJTL;
     }
 
     @Override
@@ -206,16 +233,38 @@ public class JmeterPerformanceTester extends PerformanceTester implements LogDir
         this.baseDirectory = baseDirectory;
     }
 
-    public boolean isNoAutoJTL() {
+    public boolean getNoAutoJTL() {
         return noAutoJTL;
     }
 
-    public void setNoAutoJTL(boolean noAutoJTL) {
-        this.noAutoJTL = noAutoJTL;
-    }
 
+    @Symbol("Jmeter")
     @Extension
     public static class DescriptorImpl extends PerformanceTester.PerformanceTesterDescriptor {
+        private String defaultJmxIncludingPattern ;
+        private String defaultJmeterCommand;
+
+        public String getDefaultJmxIncludingPattern() {
+            return new PerformanceTestBuilder.DescriptorImpl().getDefaultJmxIncludingPattern();
+        }
+
+        @DataBoundSetter
+        public void setDefaultJmxIncludingPattern(String defaultJmxIncludingPattern) {
+            this.defaultJmxIncludingPattern = defaultJmxIncludingPattern;
+        }
+
+
+
+        public String getDefaultJmeterCommand() {
+            return new PerformanceTestBuilder.DescriptorImpl().getDefaultJmeterCommand();
+        }
+
+        @DataBoundSetter
+        public void setDefaultJmeterCommand(String defaultJmeterCommand) {
+            this.defaultJmeterCommand = defaultJmeterCommand;
+        }
+
+
         @Override
         public String getDisplayName() {
             return "Apache Jmeter";
